@@ -1,0 +1,116 @@
+<!--
+This is the STUDENT site (index.html)
+Connect this to your Firebase project using your config
+Deploy via GitHub Pages or Firebase Hosting
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>D&A Student Page</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; color: #4b0082; background: white; }
+    input, button { padding: 10px; margin: 10px 0; width: 100%; max-width: 400px; }
+    #main, #welcome, #slotForm { display: none; }
+  </style>
+</head>
+<body>
+  <h2>D&A Speaking Time Registration</h2>
+
+  <div id="login">
+    <input id="phone" placeholder="Your phone number" /><br>
+    <input id="password" placeholder="Password" type="password" /><br>
+    <button onclick="registerOrLogin()">Register / Login</button>
+  </div>
+
+  <div id="welcome">
+    <h3>Welcome!</h3>
+    <button onclick="verifyNumber()">Choose Speaking Time</button>
+  </div>
+
+  <div id="slotForm">
+    <input id="verifyPhone" placeholder="Enter your phone again for verification" /><br>
+    <div id="slots"></div>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "mock-speaking.firebaseapp.com",
+      projectId: "mock-speaking",
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
+
+    async function registerOrLogin() {
+      const phone = document.getElementById('phone').value;
+      const pass = document.getElementById('password').value;
+      const email = phone + '@dna.uz';
+
+      try {
+        await auth.createUserWithEmailAndPassword(email, pass);
+      } catch (e) {
+        if (e.code === 'auth/email-already-in-use') {
+          await auth.signInWithEmailAndPassword(email, pass);
+        } else {
+          return alert(e.message);
+        }
+      }
+      document.getElementById('login').style.display = 'none';
+      document.getElementById('welcome').style.display = 'block';
+    }
+
+    async function verifyNumber() {
+      const vPhone = prompt('Re-enter your phone number to verify:');
+      const week = getCurrentWeek();
+
+      const eligibleDoc = await db.collection('eligiblePhones').doc(week).get();
+      const phoneList = eligibleDoc.exists ? eligibleDoc.data().phones : [];
+
+      if (!phoneList.includes(vPhone)) {
+        alert('You are not eligible for this week.');
+        return;
+      }
+
+      showSlots(vPhone);
+    }
+
+    async function showSlots(phone) {
+      document.getElementById('welcome').style.display = 'none';
+      document.getElementById('slotForm').style.display = 'block';
+
+      const week = getCurrentWeek();
+      const slotContainer = document.getElementById('slots');
+      slotContainer.innerHTML = '<p>Select a time slot:</p>';
+
+      const snapshot = await db.collection('slots').where('week', '==', week).get();
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        if (!data.bookedBy) {
+          const btn = document.createElement('button');
+          btn.textContent = data.time;
+          btn.onclick = async () => {
+            await db.collection('slots').doc(doc.id).update({ bookedBy: phone });
+            alert('Slot booked successfully!');
+            slotContainer.innerHTML = '<p>Thank you. You have booked: ' + data.time + '</p>';
+          };
+          slotContainer.appendChild(btn);
+        }
+      });
+    }
+
+    function getCurrentWeek() {
+      const today = new Date();
+      const first = new Date(today.getFullYear(), 0, 1);
+      const week = Math.ceil((((today - first) / 86400000) + first.getDay() + 1) / 7);
+      return `${today.getFullYear()}-W${week}`;
+    }
+  </script>
+</body>
+</html>
+
